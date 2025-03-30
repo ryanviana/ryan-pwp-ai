@@ -97,12 +97,46 @@ workflow.add_conditional_edges(
 logger.info("Conditional edges defined from 'triage' based on classification.")
 
 
+# Add a "collector" function to combine transformed data from parallel nodes
+def collect_transformations(states: Dict[str, Any]) -> Dict[str, Any]:
+    """Combines transformed data from multiple transformation nodes."""
+    # In newer versions of LangGraph, branch merging requires a different approach
+    # This method is called with a dictionary of states from parallel branches
+
+    # Start with any state (they should all have the same structure)
+    first_state = next(iter(states.values()))
+    result = {
+        "raw_post_data": first_state.get("raw_post_data", {}),
+        "classifications": first_state.get("classifications", []),
+        "transformed_data": {},
+        "publish_results": {},
+        "error_messages": [],
+    }
+
+    # Merge transformed data and errors from all branches
+    for state in states.values():
+        if state.get("transformed_data"):
+            result["transformed_data"].update(state.get("transformed_data", {}))
+        if state.get("error_messages"):
+            result["error_messages"].extend(state.get("error_messages", []))
+
+    return result
+
+
 # Edges from Transformation Nodes to Publisher
 # All transformation branches should eventually lead to the publish node.
-# LangGraph ensures the 'publish' node runs only after all its dependencies (the triggered transform nodes) complete.
+# Define edges from each transformation node to the publish node
 for node_name in TRANSFORMATION_NODE_MAP.values():
     workflow.add_edge(node_name, "publish")
-logger.info("Edges defined from all transformation nodes to 'publish'.")
+
+# Use compiler to handle merging of parallel branches
+# The LangGraph StateGraph class in current versions applies reducer functions
+# automatically when multiple nodes feed into a single node
+# This is resolved during compilation time
+
+logger.info(
+    "Added edges from all transformation nodes to publish node for parallel processing"
+)
 
 # Final Edge from Publisher to End
 workflow.add_edge("publish", END)
